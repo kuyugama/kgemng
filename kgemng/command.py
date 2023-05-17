@@ -1,0 +1,303 @@
+import typing
+import uuid
+from dataclasses import dataclass
+from inspect import iscoroutinefunction
+
+from named_locks import AsyncNamedLock
+from RelativeAddonsSystem import Addon
+from pyrogram import types
+
+from .api_types import ExtendedClient
+from .base import BaseManager
+
+
+NAMED_LOCK = AsyncNamedLock()
+
+
+@dataclass
+class Command:
+    body: str
+    prefixes: tuple[str]
+
+    description: str | None
+    arguments: tuple[str]
+
+    callback: typing.Callable
+    filters: tuple = ()
+    self_execution: bool = True
+
+    iscoro: bool = False
+    enabled: bool = True
+
+
+@dataclass
+class CommandExecutionProcess:
+    chat_id: int
+    command: Command
+
+
+class CommandManager(BaseManager):
+
+    def __init__(self, addon: str | Addon, enabled: bool = True):
+        super().__init__(addon, enabled)
+        self._registered_commands: list[Command] = []
+
+        self._command_executes: list[CommandExecutionProcess] = []
+
+        self.executable = self.feed_message
+
+        self._command_call_statistic = []
+
+    def get_registered_commands(self):
+        return self._registered_commands.copy()
+
+    def on_command(
+        self,
+        command: str,
+        *filters,
+        prefixes: str | tuple = ".",
+        description: str = None,
+        arguments: tuple = (),
+        enabled: bool = True,
+        self_answerable: bool = True
+    ):
+        def decorator(callback):
+
+            self.register_command(
+                callback,
+                command,
+                *filters,
+                prefixes=prefixes,
+                description=description,
+                arguments=arguments,
+                enabled=enabled,
+                self_answerable=self_answerable
+            )
+
+            return callback
+
+        return decorator
+
+    def register_command(
+        self,
+        callback,
+        command: str,
+        *filters,
+        prefixes: str | tuple = ".",
+        description: str = None,
+        arguments: tuple = (),
+        enabled: bool = True,
+        self_answerable: bool = True
+    ):
+        if not isinstance(prefixes, tuple) and not isinstance(prefixes, str):
+            raise ValueError(
+                "Cannot operate on {type} as prefixes".format(type=str(type(prefixes)))
+            )
+
+        if not isinstance(command, str):
+            raise ValueError(
+                "Cannot operate on {type} as command".format(type=str(type(command)))
+            )
+
+        if not isinstance(description, str) and description is not None:
+            raise ValueError(
+                "Cannot operate on {type} as description".format(
+                    type=str(type(description))
+                )
+            )
+
+        if not isinstance(arguments, tuple):
+            raise ValueError(
+                "Cannot operate on {type} as arguments".format(
+                    type=str(type(arguments))
+                )
+            )
+
+        if not isinstance(enabled, bool):
+            raise ValueError(
+                "Cannot operate on {type} as enable status of command".format(
+                    type=str(type(arguments))
+                )
+            )
+
+        command = command.lower()
+
+        if not isinstance(prefixes, tuple):
+            prefixes = tuple(prefixes)
+
+        for registered_command in self._registered_commands:
+            if (
+                registered_command.body == command
+                and registered_command.prefixes == prefixes
+            ):
+
+                if (
+                    description == registered_command.description or description is None
+                ) and (arguments == registered_command.arguments or len(arguments) < 1):
+                    return
+
+                if (
+                    registered_command.description != description
+                    and description is not None
+                ):
+                    registered_command.description = description
+
+                if registered_command.arguments != arguments and len(arguments) > 0:
+                    registered_command.arguments = arguments
+
+                return
+
+        self._registered_commands.append(
+            Command(
+                callback=callback,
+                body=command,
+                prefixes=prefixes,
+                description=description,
+                arguments=arguments,
+                filters=filters,
+                iscoro=iscoroutinefunction(callback),
+                enabled=enabled,
+                self_execution=self_answerable,
+            )
+        )
+
+    def describe_command(self, command: str, description: str, arguments: tuple):
+        if not isinstance(command, str):
+            raise ValueError(
+                "Cannot operate with {type} as command".format(type=str(type(command)))
+            )
+
+        if not isinstance(description, str):
+            raise ValueError(
+                "Cannot operate with {type} as description".format(
+                    type=str(type(description))
+                )
+            )
+
+        if not isinstance(arguments, tuple):
+            raise ValueError(
+                "Cannot operate with {type} as arguments".format(
+                    type=str(type(arguments))
+                )
+            )
+
+        command = command.lower()
+
+        for command_object in self._registered_commands:
+            if command_object.body == command:
+                command_object.description = description
+                command_object.arguments = arguments
+                break
+        else:
+            raise ValueError("Command {body} not found".format(body=command))
+
+    def match_command(self, text: str) -> Command | None:
+        for command in self._registered_commands:
+            if not command.enabled:
+                continue
+            for prefix in command.prefixes:
+                if not text.startswith(prefix):
+                    continue
+
+                text_without_prefix = text[len(prefix):]
+
+                if not text_without_prefix.startswith(command.body):
+                    continue
+
+                text_without_body = text_without_prefix[len(command.body):]
+
+                if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
+                    return command
+
+    def check_execution(self, command: Command, chat_id: int):
+        for executes in self._command_executes:
+            if chat_id == executes.chat_id and command == executes.command:
+                return True
+
+    def add_execution(self, record):
+        self._command_executes.append(record)
+
+    def execution_cleanup(self, remove_record):
+        for record in self._command_executes.copy():
+            if remove_record == record:
+                self._command_executes.remove(record)
+                break
+
+    def add_call_of_command(self, command: Command):
+        for record in self.get_statistic():
+            if record["command"] == command:
+                record["call_count"] += 1
+                return
+
+        self._command_call_statistic.append({"command": command, "call_count": 1})
+
+    def get_statistic(self):
+        return self._command_call_statistic
+
+    def get_total_call_count(self):
+        return sum(map(lambda rec: rec["call_count"], self.get_statistic()))
+
+    async def feed_message(self, client: ExtendedClient, message: types.Message):
+        command = self.match_command(message.text)
+
+        if not command:
+            returned = None
+            for manager in self.get_included_managers():
+                returned = await manager.feed_message(client, message)
+                if returned:
+                    self.add_call_of_command(returned)
+                    return returned
+
+            if returned is None and self.parent is None:
+                message.continue_propagation()
+            else:
+                return
+
+        async with NAMED_LOCK.lock(
+            str(message.chat.id)
+            + ":C:"
+            + (str(id(command) if command else uuid.uuid4()))
+        ):
+            self_answerable_passed = command.self_execution and not (
+                message.from_user
+                and message.from_user.id == (await client.account.info).id
+            )
+
+            if (
+                self.check_execution(command, message.chat.id)
+                and not self_answerable_passed
+            ) or self_answerable_passed:
+                return
+
+            process = CommandExecutionProcess(
+                chat_id=message.chat.id, command=command
+            )
+            self.add_execution(process)
+
+            for filter_ in command.filters:
+                if not await filter_(client, message):
+                    self.execution_cleanup(process)
+                    message.continue_propagation()
+
+            message.matched_command = command
+
+            message.command_manager = self
+
+            message.arguments = []
+            if len(message.text.split()) > 1:
+                message.arguments = [
+                    line.split()
+                    for line in message.text.split(maxsplit=1)[1].splitlines()
+                ]
+
+            try:
+                if command.iscoro:
+                    await command.callback(client, message)
+                else:
+                    command.callback(client, message)
+            finally:
+                self.execution_cleanup(process)
+
+            self.add_call_of_command(command)
+
+            return command
