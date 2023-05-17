@@ -9,5 +9,5 @@ setup(
     author='KuyuGama',
     author_email='mail.kuyugama@gmail.com',
     description='Asynchronous events managers. Part of KuyuGenesis',
-    requires=["namedlocks", "relative-addons-system", "pyrogram", "magic-filter"]
+    install_requires=["namedlocks", "relative-addons-system", "pyrogram", "magic-filter"]
 )
