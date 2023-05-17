@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='kgemng',
-    version='0.0.1',
-    packages=['kgemng'],
+    version='0.0.3',
+    packages=find_packages(),
     url='',
     license='MIT',
     author='KuyuGama',
