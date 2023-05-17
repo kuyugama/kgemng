@@ -11,7 +11,8 @@ class BaseManager:
     NO_ADDON = None
 
     def __init__(self, addon: Addon | NO_ADDON = NO_ADDON, enabled: bool = False):
-        self._logger = logging.getLogger(f"{addon.meta.name} | {type(self).__name__}")
+        addon_name = addon.meta.name if addon is not self.NO_ADDON else "NO ADDON"
+        self._logger = logging.getLogger(f"{addon_name} | {type(self).__name__}")
 
         self._enabled = enabled
 
