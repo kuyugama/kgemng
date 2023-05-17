@@ -25,7 +25,9 @@ class BaseManager:
 
     def include_manager(self, value):
         if not isinstance(value, type(self)):
-            raise ValueError("Cannot operate with {type} as manager".format(type=type(value)))
+            raise ValueError(
+                "Cannot operate with {type} as manager".format(type=type(value))
+            )
 
         self._included_managers.add(value)
         value.parent = self
@@ -34,7 +36,9 @@ class BaseManager:
 
     def exclude_manager(self, value):
         if not isinstance(value, type(self)):
-            raise ValueError("Cannot operate with {type} as manager".format(type=type(value)))
+            raise ValueError(
+                "Cannot operate with {type} as manager".format(type=type(value))
+            )
 
         self._included_managers.remove(value)
         value.parent = None
@@ -51,17 +55,24 @@ class BaseManager:
     @parent.setter
     def parent(self, value):
         if not isinstance(value, type(self)) and value is not None:
-            raise ValueError("Cannot operate with {type} as manager".format(type=type(value)))
+            raise ValueError(
+                "Cannot operate with {type} as manager".format(type=type(value))
+            )
         former_parent = self._parent
         self._parent = value
         self._logger.debug(f"Changed parent for manager. {former_parent} => {value}")
 
     def executable(self, value: Callable):
-        if not inspect.isfunction(value) and value is not None:
+        if (
+            not (inspect.isfunction(value) or inspect.iscoroutinefunction(value))
+            and value is not None
+        ):
             raise ValueError("executable must be a function")
         former_executable = self._executable
         self._executable = value
-        self._logger.debug(f"Changed executable in manager. {former_executable} => {value}")
+        self._logger.debug(
+            f"Changed executable in manager. {former_executable} => {value}"
+        )
 
     executable = property(fset=executable)
 
@@ -85,15 +96,19 @@ class BaseManager:
         return self._enabled
 
     async def execute(self, *args, **kwargs):
-        self._logger.debug(f"Executing manager with arguments > positional: {args} | keyword: {kwargs}")
+        self._logger.debug(
+            f"Executing manager with arguments > positional: {args} | keyword: {kwargs}"
+        )
         if not self._enabled:
             self._logger.debug("Manager is disabled > exit")
             return
 
         if not self._executable:
-            self._logger.warning("Manager doesn't have executable, but tried to be executed".format(
-                mng=self
-            ))
+            self._logger.warning(
+                "Manager doesn't have executable, but tried to be executed".format(
+                    mng=self
+                )
+            )
             return
 
         start = timeit.default_timer()
@@ -104,6 +119,8 @@ class BaseManager:
             self._logger.debug(f"Executable returned the coroutine. Waiting it...")
             await result
 
-        self._logger.debug(f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms")
+        self._logger.debug(
+            f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms"
+        )
 
         return result
