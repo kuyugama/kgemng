@@ -329,7 +329,7 @@ class EventManager(BaseManager):
 
             if isinstance(event, NewMessageEvent):
                 if (
-                        event.message.sender_chat is not None or
+                        event.message.from_user is not None and
                         event.message.from_user.id != (await client.account.info).id
                 ) and by_me:
                     continue
