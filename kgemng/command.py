@@ -21,7 +21,7 @@ class Command:
 
     callback: typing.Callable
     filters: tuple = ()
-    self_execution: bool = True
+    owner_only: bool = True
 
     iscoro: bool = False
     enabled: bool = True
@@ -57,7 +57,7 @@ class CommandManager(BaseManager):
         description: str = None,
         arguments: tuple = (),
         enabled: bool = True,
-        self_answerable: bool = True,
+        owner_only: bool = True,
     ):
         def decorator(callback):
 
@@ -69,7 +69,7 @@ class CommandManager(BaseManager):
                 description=description,
                 arguments=arguments,
                 enabled=enabled,
-                self_answerable=self_answerable,
+                owner_only=owner_only,
             )
 
             return callback
@@ -85,7 +85,7 @@ class CommandManager(BaseManager):
         description: str = None,
         arguments: tuple = (),
         enabled: bool = True,
-        self_answerable: bool = True,
+        owner_only: bool = True,
     ):
         if not isinstance(prefixes, tuple) and not isinstance(prefixes, str):
             raise ValueError(
@@ -155,7 +155,7 @@ class CommandManager(BaseManager):
                 filters=filters,
                 iscoro=iscoroutinefunction(callback),
                 enabled=enabled,
-                self_execution=self_answerable,
+                owner_only=owner_only,
             )
         )
 
@@ -197,12 +197,12 @@ class CommandManager(BaseManager):
                 if not text.startswith(prefix):
                     continue
 
-                text_without_prefix = text[len(prefix) :]
+                text_without_prefix = text[len(prefix):]
 
                 if not text_without_prefix.startswith(command.body):
                     continue
 
-                text_without_body = text_without_prefix[len(command.body) :]
+                text_without_body = text_without_prefix[len(command.body):]
 
                 if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
                     return command
@@ -254,7 +254,7 @@ class CommandManager(BaseManager):
         key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
 
         async with self._lock.lock(key):
-            self_answerable_passed = command.self_execution and not (
+            self_answerable_passed = command.owner_only and not (
                 message.from_user
                 and message.from_user.id == (await client.account.info).id
             )
