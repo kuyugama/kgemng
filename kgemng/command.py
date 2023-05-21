@@ -254,15 +254,15 @@ class CommandManager(BaseManager):
         key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
 
         async with self._lock.lock(key):
-            self_answerable_passed = command.owner_only and not (
+            owner_only_passed = command.owner_only and not (
                 message.from_user
                 and message.from_user.id == (await client.account.info).id
             )
 
             if (
                 self.check_execution(command, message.chat.id)
-                and not self_answerable_passed
-            ) or self_answerable_passed:
+                and not owner_only_passed
+            ) or owner_only_passed:
                 return
 
             process = CommandExecutionProcess(chat_id=message.chat.id, command=command)
