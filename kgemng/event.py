@@ -1,3 +1,4 @@
+import asyncio
 import json
 import typing
 from dataclasses import dataclass, fields
@@ -18,6 +19,7 @@ from pyrogram.raw.types import (
 )
 from pyrogram.raw import types as raw_types
 from magic_filter import F, MagicFilter
+from named_locks import AsyncNamedLock
 
 from .api_types import ExtendedClient, Account
 from .base import BaseManager
@@ -77,21 +79,23 @@ class EventManager(BaseManager):
         super().__init__(addon, enabled)
         self.executable = self.feed_event
         self._event_handlers = []
+        self._lock = AsyncNamedLock()
 
     def on_message(self, filter_: MagicFilter = F, by_me: bool = False):
         def decorator(callback: typing.Callable):
-            self.register_message_handler(callback=callback, filter_=filter_, by_me=by_me)
+            self.register_message_handler(
+                callback=callback, filter_=filter_, by_me=by_me
+            )
             return callback
 
         return decorator
 
-    def register_message_handler(self, callback: typing.Callable, filter_: MagicFilter = F, by_me: bool = False):
+    def register_message_handler(
+        self, callback: typing.Callable, filter_: MagicFilter = F, by_me: bool = False
+    ):
 
         self.register_event_handler(
-            NewMessageEvent,
-            callback,
-            filter_=filter_,
-            by_me=by_me
+            NewMessageEvent, callback, filter_=filter_, by_me=by_me
         )
 
     def on_messages_read(
@@ -122,45 +126,38 @@ class EventManager(BaseManager):
             filter_ = F
 
         self.register_event_handler(
-            MessageReadEvent,
-            callback=callback,
-            filter_=filter_,
-            by_me=by_me
+            MessageReadEvent, callback=callback, filter_=filter_, by_me=by_me
         )
 
     def on_event(
-            self,
-            event: type[Event],
-            filter_: MagicFilter = F,
-            by_me: bool = True
+        self, event: type[Event], filter_: MagicFilter = F, by_me: bool = True
     ):
         def decorator(callback):
             self.register_event_handler(
-                event=event,
-                filter_=filter_,
-                callback=callback,
-                by_me=by_me
+                event=event, filter_=filter_, callback=callback, by_me=by_me
             )
             return callback
 
         return decorator
 
     def register_event_handler(
-            self,
-            event: type[Event],
-            callback: typing.Callable,
-            filter_: MagicFilter = F,
-            by_me: bool = True
+        self,
+        event: type[Event],
+        callback: typing.Callable,
+        filter_: MagicFilter = F,
+        by_me: bool = True,
     ):
         if not iscoroutinefunction(callback):
-            raise ValueError("This userbot doesn't supports the synchronous pyrogram handlers")
+            raise ValueError(
+                "This userbot doesn't supports the synchronous pyrogram handlers"
+            )
 
         self._event_handlers.append(
             {
                 "event_type": event,
                 "filter": filter_,
                 "callback": callback,
-                "by_me": by_me
+                "by_me": by_me,
             }
         )
 
@@ -211,14 +208,18 @@ class EventManager(BaseManager):
                 peer = users.get(peer_id) or chats.get(peer_id)
 
                 if isinstance(
-                        raw_event,
-                        (
-                                raw_types.UpdateReadChannelDiscussionInbox,
-                                raw_types.UpdateReadChannelDiscussionOutbox
-                        )
+                    raw_event,
+                    (
+                        raw_types.UpdateReadChannelDiscussionInbox,
+                        raw_types.UpdateReadChannelDiscussionOutbox,
+                    ),
                 ):
                     try:
-                        chat = (await client.get_discussion_message("-100" + str(peer_id), raw_event.top_msg_id)).chat
+                        chat = (
+                            await client.get_discussion_message(
+                                "-100" + str(peer_id), raw_event.top_msg_id
+                            )
+                        ).chat
                     except errors.PeerIdInvalid:
                         return
 
@@ -252,17 +253,15 @@ class EventManager(BaseManager):
 
             return MessageReadEvent(
                 chat=chat,
-                max_id=getattr(raw_event, "max_id", getattr(raw_event, "read_max_id", None)),
+                max_id=getattr(
+                    raw_event, "max_id", getattr(raw_event, "read_max_id", None)
+                ),
                 account=account,
                 by_me=by_me,
             )
 
         elif isinstance(
-                raw_event,
-                (
-                        raw_types.UpdateNewMessage,
-                        raw_types.UpdateNewChannelMessage
-                )
+            raw_event, (raw_types.UpdateNewMessage, raw_types.UpdateNewChannelMessage)
         ):
             message: types.Message = await types.Message._parse(
                 client, raw_event.message, users, chats
@@ -271,32 +270,24 @@ class EventManager(BaseManager):
             return NewMessageEvent(account=account, message=message)
 
         elif isinstance(
-                raw_event,
-                (
-                        raw_types.UpdateDeleteChannelMessages,
-                        raw_types.UpdateDeleteMessages
-                )
+            raw_event,
+            (raw_types.UpdateDeleteChannelMessages, raw_types.UpdateDeleteMessages),
         ):
 
             chat = None
 
-            if isinstance(
-                    raw_event,
-                    raw_types.UpdateDeleteChannelMessages
-            ):
+            if isinstance(raw_event, raw_types.UpdateDeleteChannelMessages):
                 try:
                     chat = await client.get_chat(f"-100{raw_event.channel_id}")
                 except errors.PeerIdInvalid:
                     return
 
-            return DeletedMessagesEvent(messages=raw_event.messages, chat=chat, account=account)
+            return DeletedMessagesEvent(
+                messages=raw_event.messages, chat=chat, account=account
+            )
 
         elif isinstance(
-                raw_event,
-                (
-                        raw_types.UpdateEditMessage,
-                        raw_types.UpdateEditChannelMessage
-                )
+            raw_event, (raw_types.UpdateEditMessage, raw_types.UpdateEditChannelMessage)
         ):
             message: types.Message = await types.Message._parse(
                 client, raw_event.message, users, chats
@@ -311,51 +302,56 @@ class EventManager(BaseManager):
         users: dict[int, types.User],
         chats: dict[int, types.Chat],
     ):
-        event = await self.resolve_event(
-            client=client, raw_event=raw_event, users=users, chats=chats
-        )
+        async with self._lock.lock(client):
+            event = await self.resolve_event(
+                client=client, raw_event=raw_event, users=users, chats=chats
+            )
 
-        for handler in self._event_handlers:
-            event_type = handler.get("event_type")
-            if not isinstance(event, event_type):
-                continue
-
-            filter_: MagicFilter = handler.get("filter")
-            by_me: bool = handler.get("by_me")
-            callback: typing.Callable = handler.get("callback")
-
-            if not filter_.resolve(event):
-                continue
-
-            if isinstance(event, NewMessageEvent):
-                if (
-                        event.message.from_user is not None and
-                        event.message.from_user.id != (await client.account.info).id
-                ) and by_me:
+            for handler in self._event_handlers:
+                event_type = handler.get("event_type")
+                if not isinstance(event, event_type):
                     continue
 
-            elif isinstance(
-                event,
-                    (
-                        UpdateReadHistoryInbox,
-                        UpdateReadChannelInbox,
-                        UpdateReadChannelDiscussionInbox,
-                    )
-            ) and by_me:
-                continue
-            elif isinstance(
-                event,
-                    (
-                        UpdateReadHistoryOutbox,
-                        UpdateReadChannelOutbox,
-                        UpdateReadChannelDiscussionOutbox,
-                    )
-            ) and not by_me:
-                continue
+                filter_: MagicFilter = handler.get("filter")
+                by_me: bool = handler.get("by_me")
+                callback: typing.Callable = handler.get("callback")
 
-            await callback(event)
+                if not filter_.resolve(event):
+                    continue
 
-        for manager in self.get_included_managers():
-            await manager.execute(
-                client, raw_event, users, chats
-            )
+                if isinstance(event, NewMessageEvent):
+                    if (
+                        event.message.from_user is not None
+                        and event.message.from_user.id != (await client.account.info).id
+                    ) and by_me:
+                        continue
+
+                elif (
+                    isinstance(
+                        event,
+                        (
+                            UpdateReadHistoryInbox,
+                            UpdateReadChannelInbox,
+                            UpdateReadChannelDiscussionInbox,
+                        ),
+                    )
+                    and by_me
+                ):
+                    continue
+                elif (
+                    isinstance(
+                        event,
+                        (
+                            UpdateReadHistoryOutbox,
+                            UpdateReadChannelOutbox,
+                            UpdateReadChannelDiscussionOutbox,
+                        ),
+                    )
+                    and not by_me
+                ):
+                    continue
+
+                await callback(event)
+
+            for manager in self.get_included_managers():
+                await manager.execute(client, raw_event, users, chats)

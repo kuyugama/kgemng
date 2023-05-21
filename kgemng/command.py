@@ -11,9 +11,6 @@ from .api_types import ExtendedClient
 from .base import BaseManager
 
 
-NAMED_LOCK = AsyncNamedLock()
-
-
 @dataclass
 class Command:
     body: str
@@ -37,7 +34,6 @@ class CommandExecutionProcess:
 
 
 class CommandManager(BaseManager):
-
     def __init__(self, addon: str | Addon, enabled: bool = True):
         super().__init__(addon, enabled)
         self._registered_commands: list[Command] = []
@@ -47,6 +43,8 @@ class CommandManager(BaseManager):
         self.executable = self.feed_message
 
         self._command_call_statistic = []
+
+        self._lock = AsyncNamedLock()
 
     def get_registered_commands(self):
         return self._registered_commands.copy()
@@ -59,7 +57,7 @@ class CommandManager(BaseManager):
         description: str = None,
         arguments: tuple = (),
         enabled: bool = True,
-        self_answerable: bool = True
+        self_answerable: bool = True,
     ):
         def decorator(callback):
 
@@ -71,7 +69,7 @@ class CommandManager(BaseManager):
                 description=description,
                 arguments=arguments,
                 enabled=enabled,
-                self_answerable=self_answerable
+                self_answerable=self_answerable,
             )
 
             return callback
@@ -87,7 +85,7 @@ class CommandManager(BaseManager):
         description: str = None,
         arguments: tuple = (),
         enabled: bool = True,
-        self_answerable: bool = True
+        self_answerable: bool = True,
     ):
         if not isinstance(prefixes, tuple) and not isinstance(prefixes, str):
             raise ValueError(
@@ -199,12 +197,12 @@ class CommandManager(BaseManager):
                 if not text.startswith(prefix):
                     continue
 
-                text_without_prefix = text[len(prefix):]
+                text_without_prefix = text[len(prefix) :]
 
                 if not text_without_prefix.startswith(command.body):
                     continue
 
-                text_without_body = text_without_prefix[len(command.body):]
+                text_without_body = text_without_prefix[len(command.body) :]
 
                 if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
                     return command
@@ -253,11 +251,9 @@ class CommandManager(BaseManager):
             else:
                 return
 
-        async with NAMED_LOCK.lock(
-            str(message.chat.id)
-            + ":C:"
-            + (str(id(command) if command else uuid.uuid4()))
-        ):
+        key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
+
+        async with self._lock.lock(key):
             self_answerable_passed = command.self_execution and not (
                 message.from_user
                 and message.from_user.id == (await client.account.info).id
@@ -269,9 +265,7 @@ class CommandManager(BaseManager):
             ) or self_answerable_passed:
                 return
 
-            process = CommandExecutionProcess(
-                chat_id=message.chat.id, command=command
-            )
+            process = CommandExecutionProcess(chat_id=message.chat.id, command=command)
             self.add_execution(process)
 
             for filter_ in command.filters:
