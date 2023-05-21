@@ -1,3 +1,4 @@
+import logging
 import typing
 import uuid
 from dataclasses import dataclass
@@ -34,8 +35,10 @@ class CommandExecutionProcess:
 
 
 class CommandManager(BaseManager):
-    def __init__(self, addon: str | Addon, enabled: bool = True):
-        super().__init__(addon, enabled)
+    def __init__(
+        self, addon: str | Addon, enabled: bool = True, log_level: int = logging.WARNING
+    ):
+        super().__init__(addon, enabled, log_level)
         self._registered_commands: list[Command] = []
 
         self._command_executes: list[CommandExecutionProcess] = []
@@ -197,12 +200,12 @@ class CommandManager(BaseManager):
                 if not text.startswith(prefix):
                     continue
 
-                text_without_prefix = text[len(prefix):]
+                text_without_prefix = text[len(prefix) :]
 
                 if not text_without_prefix.startswith(command.body):
                     continue
 
-                text_without_body = text_without_prefix[len(command.body):]
+                text_without_body = text_without_prefix[len(command.body) :]
 
                 if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
                     return command
@@ -260,8 +263,7 @@ class CommandManager(BaseManager):
             )
 
             if (
-                self.check_execution(command, message.chat.id)
-                and not owner_only_passed
+                self.check_execution(command, message.chat.id) and not owner_only_passed
             ) or owner_only_passed:
                 return
 

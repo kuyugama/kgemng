@@ -11,10 +11,19 @@ from pyrogram import ContinuePropagation, StopPropagation
 class BaseManager:
     NO_ADDON = None
 
-    def __init__(self, addon: Addon | NO_ADDON = NO_ADDON, enabled: bool = False):
-        self._error_handler: Callable[[BaseException, dict[str, Any]], None] | None = None
+    def __init__(
+        self,
+        addon: Addon | NO_ADDON = NO_ADDON,
+        enabled: bool = False,
+        log_level: int = logging.WARNING,
+    ):
+        self._error_handler: Callable[
+            [BaseException, dict[str, Any]], None
+        ] | None = None
         addon_name = addon.meta.name if addon is not self.NO_ADDON else "NO ADDON"
         self._logger = logging.getLogger(f"{addon_name} | {type(self).__name__}")
+
+        self._logger.setLevel(log_level)
 
         self._enabled = enabled
 
@@ -105,7 +114,9 @@ class BaseManager:
 
         return decorator
 
-    def set_error_handler(self, handler: Callable[[BaseException, dict[str, Any]], None]):
+    def set_error_handler(
+        self, handler: Callable[[BaseException, dict[str, Any]], None]
+    ):
         self._error_handler = handler
 
     async def execute(self, *args, **kwargs):

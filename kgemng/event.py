@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import typing
 from dataclasses import dataclass, fields
 from inspect import iscoroutinefunction
@@ -75,8 +76,13 @@ class EditedMessageEvent(Event):
 
 
 class EventManager(BaseManager):
-    def __init__(self, addon: Addon | None = None, enabled: bool = False):
-        super().__init__(addon, enabled)
+    def __init__(
+        self,
+        addon: Addon | None = None,
+        enabled: bool = False,
+        log_level: int = logging.WARNING,
+    ):
+        super().__init__(addon, enabled, log_level)
         self.executable = self.feed_event
         self._event_handlers = []
         self._lock = AsyncNamedLock()
