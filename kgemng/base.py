@@ -5,6 +5,7 @@ from types import FunctionType
 from typing import Callable, Union, Any
 
 from RelativeAddonsSystem import Addon
+from pyrogram import ContinuePropagation, StopPropagation
 
 
 class BaseManager:
@@ -131,10 +132,15 @@ class BaseManager:
             if inspect.iscoroutine(result):
                 self._logger.debug(f"Executable returned the coroutine. Waiting it...")
                 await result
+        except (ContinuePropagation, StopPropagation):
+            raise
         except BaseException as exc:
             if self._error_handler:
-                self._error_handler(exc, dict(args=args, kwargs=kwargs))
+                self._error_handler(exc, dict(args=args, kwargs=kwargs, manager=self))
             else:
+                if self.parent is not None:
+                    raise
+
                 self._logger.warning(
                     "Error occurred while executing manager."
                     "Set the error handler to see more details"
