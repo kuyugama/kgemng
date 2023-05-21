@@ -2,7 +2,7 @@ import inspect
 import logging
 import timeit
 from types import FunctionType
-from typing import Callable, Union
+from typing import Callable, Union, Any
 
 from RelativeAddonsSystem import Addon
 
@@ -11,6 +11,7 @@ class BaseManager:
     NO_ADDON = None
 
     def __init__(self, addon: Addon | NO_ADDON = NO_ADDON, enabled: bool = False):
+        self._error_handler: Callable[[BaseException, dict[str, Any]], None] | None = None
         addon_name = addon.meta.name if addon is not self.NO_ADDON else "NO ADDON"
         self._logger = logging.getLogger(f"{addon_name} | {type(self).__name__}")
 
@@ -96,6 +97,16 @@ class BaseManager:
     def is_enabled(self):
         return self._enabled
 
+    def error_handler(self):
+        def decorator(handler: Callable[[BaseException, dict[str, Any]], None]):
+            self._error_handler = handler
+            return handler
+
+        return decorator
+
+    def set_error_handler(self, handler: Callable[[BaseException, dict[str, Any]], None]):
+        self._error_handler = handler
+
     async def execute(self, *args, **kwargs):
         self._logger.debug(
             f"Executing manager with arguments > positional: {args} | keyword: {kwargs}"
@@ -114,11 +125,21 @@ class BaseManager:
 
         start = timeit.default_timer()
 
-        result = self._executable(*args, **kwargs)
+        try:
+            result = self._executable(*args, **kwargs)
 
-        if inspect.iscoroutine(result):
-            self._logger.debug(f"Executable returned the coroutine. Waiting it...")
-            await result
+            if inspect.iscoroutine(result):
+                self._logger.debug(f"Executable returned the coroutine. Waiting it...")
+                await result
+        except BaseException as exc:
+            if self._error_handler:
+                self._error_handler(exc, dict(args=args, kwargs=kwargs))
+            else:
+                self._logger.warning(
+                    "Error occurred while executing manager."
+                    "Set the error handler to see more details"
+                )
+            result = None
 
         self._logger.debug(
             f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms"
