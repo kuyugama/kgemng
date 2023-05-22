@@ -13,7 +13,7 @@ class AddonNotSet:
     pass
 
 
-def try_to_get_addon(back_for: int = 2):
+def try_to_get_addon(back_for: int = 3):
     try:
         frame_info = inspect.stack()[back_for]
 
