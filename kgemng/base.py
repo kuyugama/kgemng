@@ -32,13 +32,21 @@ class BaseManager:
         enabled: bool = False,
         log_level: int = logging.WARNING,
     ):
-        self._error_handler: Callable[
-            [BaseException, dict[str, Any]], None
-        ] | None = None
-        addon_name = addon.meta.name if addon is not self.NO_ADDON else "NO ADDON"
+        if addon is AddonNotSet:
+            addon = try_to_get_addon()
+
+        if isinstance(addon, Addon):
+            addon_name = addon.meta.name
+        else:
+            addon_name = "NO ADDON"
+
         self._logger = logging.getLogger(f"{addon_name} | {type(self).__name__}")
 
         self._logger.setLevel(log_level)
+
+        self._error_handler: Callable[
+                                 [BaseException, dict[str, Any]], None
+                             ] | None = None
 
         self._enabled = enabled
 
@@ -47,9 +55,6 @@ class BaseManager:
         self._parent = None
 
         self._included_managers: set[BaseManager] = set()
-
-        if addon is AddonNotSet:
-            addon = try_to_get_addon()
 
         self._addon = addon
 
