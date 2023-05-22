@@ -1,3 +1,4 @@
+import copy
 import logging
 import typing
 import uuid
@@ -9,7 +10,7 @@ from RelativeAddonsSystem import Addon
 from pyrogram import types
 
 from .api_types import ExtendedClient
-from .base import BaseManager
+from .base import BaseManager, AddonNotSet
 
 
 @dataclass
@@ -36,7 +37,7 @@ class CommandExecutionProcess:
 
 class CommandManager(BaseManager):
     def __init__(
-        self, addon: str | Addon, enabled: bool = True, log_level: int = logging.WARNING
+        self, addon: Addon | None = AddonNotSet, enabled: bool = True, log_level: int = logging.WARNING
     ):
         super().__init__(addon, enabled, log_level)
         self._registered_commands: list[Command] = []
@@ -54,7 +55,7 @@ class CommandManager(BaseManager):
 
     def on_command(
         self,
-        command: str,
+        body: str,
         *filters,
         prefixes: str | tuple = ".",
         description: str = None,
@@ -66,7 +67,7 @@ class CommandManager(BaseManager):
 
             self.register_command(
                 callback,
-                command,
+                body,
                 *filters,
                 prefixes=prefixes,
                 description=description,
@@ -82,22 +83,22 @@ class CommandManager(BaseManager):
     def register_command(
         self,
         callback,
-        command: str,
+        body: str,
         *filters,
         prefixes: str | tuple = ".",
         description: str = None,
         arguments: tuple = (),
         enabled: bool = True,
         owner_only: bool = True,
-    ):
+    ) -> Command | None:
         if not isinstance(prefixes, tuple) and not isinstance(prefixes, str):
             raise ValueError(
                 "Cannot operate on {type} as prefixes".format(type=str(type(prefixes)))
             )
 
-        if not isinstance(command, str):
+        if not isinstance(body, str):
             raise ValueError(
-                "Cannot operate on {type} as command".format(type=str(type(command)))
+                "Cannot operate on {type} as command".format(type=str(type(body)))
             )
 
         if not isinstance(description, str) and description is not None:
@@ -121,14 +122,14 @@ class CommandManager(BaseManager):
                 )
             )
 
-        command = command.lower()
+        body = body.lower()
 
         if not isinstance(prefixes, tuple):
             prefixes = tuple(prefixes)
 
         for registered_command in self._registered_commands:
             if (
-                registered_command.body == command
+                registered_command.body == body
                 and registered_command.prefixes == prefixes
             ):
 
@@ -148,19 +149,23 @@ class CommandManager(BaseManager):
 
                 return
 
-        self._registered_commands.append(
-            Command(
-                callback=callback,
-                body=command,
-                prefixes=prefixes,
-                description=description,
-                arguments=arguments,
-                filters=filters,
-                iscoro=iscoroutinefunction(callback),
-                enabled=enabled,
-                owner_only=owner_only,
-            )
+        command = Command(
+            callback=callback,
+            body=body,
+            prefixes=prefixes,
+            description=description,
+            arguments=arguments,
+            filters=filters,
+            iscoro=iscoroutinefunction(callback),
+            enabled=enabled,
+            owner_only=owner_only,
         )
+
+        self._registered_commands.append(
+            command
+        )
+
+        return copy.deepcopy(command)
 
     def describe_command(self, command: str, description: str, arguments: tuple):
         if not isinstance(command, str):
@@ -192,6 +197,13 @@ class CommandManager(BaseManager):
         else:
             raise ValueError("Command {body} not found".format(body=command))
 
+    def remove_command(self, command: Command):
+        if command not in self._registered_commands:
+            return
+
+        self._registered_commands.remove(command)
+        return True
+
     def match_command(self, text: str) -> Command | None:
         for command in self._registered_commands:
             if not command.enabled:
@@ -200,12 +212,12 @@ class CommandManager(BaseManager):
                 if not text.startswith(prefix):
                     continue
 
-                text_without_prefix = text[len(prefix) :]
+                text_without_prefix = text[len(prefix):]
 
                 if not text_without_prefix.startswith(command.body):
                     continue
 
-                text_without_body = text_without_prefix[len(command.body) :]
+                text_without_body = text_without_prefix[len(command.body):]
 
                 if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
                     return command

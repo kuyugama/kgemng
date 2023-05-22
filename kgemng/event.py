@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import typing
@@ -23,7 +22,7 @@ from magic_filter import F, MagicFilter
 from named_locks import AsyncNamedLock
 
 from .api_types import ExtendedClient, Account
-from .base import BaseManager
+from .base import BaseManager, AddonNotSet
 
 
 class BeautyModel:
@@ -78,7 +77,7 @@ class EditedMessageEvent(Event):
 class EventManager(BaseManager):
     def __init__(
         self,
-        addon: Addon | None = None,
+        addon: Addon | None = AddonNotSet,
         enabled: bool = False,
         log_level: int = logging.WARNING,
     ):

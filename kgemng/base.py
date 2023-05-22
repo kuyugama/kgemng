@@ -1,6 +1,7 @@
 import inspect
 import logging
 import timeit
+from pathlib import Path
 from types import FunctionType
 from typing import Callable, Union, Any
 
@@ -8,12 +9,26 @@ from RelativeAddonsSystem import Addon
 from pyrogram import ContinuePropagation, StopPropagation
 
 
+class AddonNotSet:
+    pass
+
+
+def try_to_get_addon(back_for: int = 2):
+    try:
+        frame_info = inspect.stack()[back_for]
+
+        return Addon(Path(frame_info.filename).parent)
+
+    except FileNotFoundError:
+        return None
+
+
 class BaseManager:
     NO_ADDON = None
 
     def __init__(
         self,
-        addon: Addon | NO_ADDON = NO_ADDON,
+        addon: Addon | NO_ADDON = AddonNotSet,
         enabled: bool = False,
         log_level: int = logging.WARNING,
     ):
@@ -33,7 +48,15 @@ class BaseManager:
 
         self._included_managers: set[BaseManager] = set()
 
+        if addon is AddonNotSet:
+            addon = try_to_get_addon()
+
         self._addon = addon
+
+    def __repr__(self):
+        addon_name = self._addon.meta.name if self._addon else "NO ADDON"
+
+        return f"{type(self).__name__}(addon={addon_name}, enabled={self._enabled})"
 
     def include_manager(self, value):
         if not isinstance(value, type(self)):
