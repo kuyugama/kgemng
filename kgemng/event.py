@@ -174,6 +174,10 @@ class EventManager(BaseManager):
         users: dict[int, types.User],
         chats: dict[int, types.Chat],
     ):
+
+        if isinstance(raw_event, Event):
+            return raw_event
+
         account = client.account
 
         if isinstance(
@@ -359,4 +363,4 @@ class EventManager(BaseManager):
                 await callback(event)
 
             for manager in self.get_included_managers():
-                await manager.execute(client, raw_event, users, chats)
+                await manager.execute(client, event, users, chats)
