@@ -6,7 +6,7 @@ from inspect import iscoroutinefunction
 from RelativeAddonsSystem import Addon
 from magic_filter import F, MagicFilter
 from named_locks import AsyncNamedLock
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 from pyrogram import types, errors, StopPropagation
 from pyrogram.raw import types as raw_types
 from pyrogram.raw.base import Update
@@ -21,8 +21,8 @@ from pyrogram.raw.types import (
     UpdateReadHistoryInbox,
 )
 
-from api_types import ExtendedClient, Account
-from base import BaseManager, AddonNotSet, SkipMe
+from .api_types import ExtendedClient, Account
+from .base import BaseManager, AddonNotSet, SkipMe
 
 
 class BeautyModel(BaseModel):
