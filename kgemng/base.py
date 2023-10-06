@@ -41,12 +41,17 @@ class BaseManager:
         if addon is AddonNotSet:
             addon = try_to_get_addon()
 
+            # If this is subclass of BaseManager, and it's running this init with super()
+            # function we should do deeper search
+            if type(self) is not BaseManager and addon is None:
+                addon = try_to_get_addon(4)
+
         if isinstance(addon, Addon):
             addon_name = addon.meta.name
         else:
             addon_name = "NO ADDON"
 
-        self._logger = logging.getLogger(f"{addon_name} | {type(self).__name__}")
+        self._logger = logging.getLogger(f"{addon_name}.{type(self).__name__}")
 
         self._logger.setLevel(log_level)
 
@@ -185,6 +190,8 @@ class BaseManager:
             else:
                 if self.parent is not None:
                     raise SkipMe
+                else:
+                    raise ContinuePropagation
         except (ContinuePropagation, StopPropagation):
             raise
         except BaseException as exc:
