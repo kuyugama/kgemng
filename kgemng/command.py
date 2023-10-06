@@ -10,7 +10,7 @@ from RelativeAddonsSystem import Addon
 from pyrogram import types
 
 from .api_types import ExtendedClient
-from .base import BaseManager, AddonNotSet
+from .base import BaseManager, AddonNotSet, SkipMe
 
 
 @dataclass
@@ -36,6 +36,8 @@ class CommandExecutionProcess:
 
 
 class CommandManager(BaseManager):
+    _parent: type["CommandManager"] | None = None
+
     def __init__(
         self, addon: Addon | None = AddonNotSet, enabled: bool = True, log_level: int = logging.WARNING
     ):
@@ -244,6 +246,9 @@ class CommandManager(BaseManager):
 
         self._command_call_statistic.append({"command": command, "call_count": 1})
 
+        if self.parent:
+            self.parent.add_call_of_command(command)
+
     def get_statistic(self):
         return self._command_call_statistic
 
@@ -254,24 +259,14 @@ class CommandManager(BaseManager):
         command = self.match_command(message.text)
 
         if not command:
-            returned = None
-            for manager in self.get_included_managers():
-                returned = await manager.feed_message(client, message)
-                if returned:
-                    self.add_call_of_command(returned)
-                    return returned
-
-            if returned is None and self.parent is None:
-                message.continue_propagation()
-            else:
-                return
+            raise SkipMe
 
         key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
 
         async with self._lock.lock(key):
             owner_only_passed = command.owner_only and not (
                 message.from_user
-                and message.from_user.id == (await client.account.info).id
+                and message.from_user.id == client.account.info.id
             )
 
             if (

@@ -1,11 +1,10 @@
 import json
 import logging
 import typing
-from dataclasses import dataclass, fields
 from inspect import iscoroutinefunction
 
 from RelativeAddonsSystem import Addon
-from pyrogram import types, errors
+from pyrogram import types, errors, StopPropagation
 from pyrogram.raw.base import Update
 from pyrogram.raw.types import (
     UpdateReadChannelOutbox,
@@ -20,17 +19,17 @@ from pyrogram.raw.types import (
 from pyrogram.raw import types as raw_types
 from magic_filter import F, MagicFilter
 from named_locks import AsyncNamedLock
+from pydantic import BaseModel
 
 from .api_types import ExtendedClient, Account
-from .base import BaseManager, AddonNotSet
+from .base import BaseManager, AddonNotSet, SkipMe
 
 
-class BeautyModel:
+class BeautyModel(BaseModel):
     def __str__(self):
         elements = {"_": self.__class__.__name__}
-        # noinspection PyDataclass
-        for field in fields(self):
-            value = getattr(self, field.name)
+        for field in self.fields:
+            value = getattr(self, field)
 
             if isinstance(value, types.Object):
                 value = json.loads(str(value))
@@ -41,40 +40,43 @@ class BeautyModel:
             else:
                 value = repr(value)
 
-            elements[field.name] = value
+            elements[field] = value
 
         return json.dumps(elements, indent=4, ensure_ascii=False)
 
 
-@dataclass()
 class Event(BeautyModel):
     account: Account
+    skipped: bool = False
+
+    def cancel(self):
+        raise StopPropagation()
+
+    def skip(self):
+        self.skipped = True
 
 
-@dataclass()
 class MessageReadEvent(Event):
     chat: types.Chat
-    max_id: int
+    last_id: int
     by_me: bool = False
 
 
-@dataclass()
 class NewMessageEvent(Event):
     message: types.Message
 
 
-@dataclass()
 class DeletedMessagesEvent(Event):
     messages: typing.List[int]
     chat: types.Chat
 
 
-@dataclass()
 class EditedMessageEvent(Event):
     message: types.Message
 
 
 class EventManager(BaseManager):
+    _parent: type["EventManager"] | None = None
     def __init__(
         self,
         addon: Addon | None = AddonNotSet,
@@ -262,7 +264,7 @@ class EventManager(BaseManager):
 
             return MessageReadEvent(
                 chat=chat,
-                max_id=getattr(
+                last_id=getattr(
                     raw_event, "max_id", getattr(raw_event, "read_max_id", None)
                 ),
                 account=account,
@@ -331,7 +333,7 @@ class EventManager(BaseManager):
                 if isinstance(event, NewMessageEvent):
                     if (
                         event.message.from_user is not None
-                        and event.message.from_user.id != (await client.account.info).id
+                        and event.message.from_user.id != client.account.info.id
                     ) and by_me:
                         continue
 
@@ -360,7 +362,12 @@ class EventManager(BaseManager):
                 ):
                     continue
 
-                await callback(event)
+                result = await callback(event)
 
-            for manager in self.get_included_managers():
-                await manager.execute(client, event, users, chats)
+                if event.skipped:
+                    event.skipped = False
+                    continue
+
+                return result
+
+        raise SkipMe

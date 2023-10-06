@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="kgemng",
-    version="0.2.3",
+    version="0.2.4",
     packages=find_packages(),
     url="",
     license="MIT",
@@ -14,5 +14,6 @@ setup(
         "relative-addons-system",
         "pyrogram",
         "magic-filter",
+        "pydantic==1.10.8"
     ],
 )

@@ -9,6 +9,10 @@ from RelativeAddonsSystem import Addon
 from pyrogram import ContinuePropagation, StopPropagation
 
 
+class SkipMe(Exception):
+    """Exception used to skip current event manager execution and start executing the included managers"""
+
+
 class AddonNotSet:
     pass
 
@@ -25,6 +29,8 @@ def try_to_get_addon(back_for: int = 3):
 
 class BaseManager:
     NO_ADDON = None
+
+    _parent: type["BaseManager"] | None = None
 
     def __init__(
         self,
@@ -51,8 +57,6 @@ class BaseManager:
         self._enabled = enabled
 
         self._executable: Union[FunctionType, None] = None
-
-        self._parent = None
 
         self._included_managers: set[BaseManager] = set()
 
@@ -171,6 +175,15 @@ class BaseManager:
             if inspect.iscoroutine(result):
                 self._logger.debug(f"Executable returned the coroutine. Waiting it...")
                 await result
+        except SkipMe:
+            for manager in self.get_included_managers():
+                try:
+                    result = await manager.execute(*args, **kwargs)
+                    break
+                except SkipMe:
+                    pass
+            else:
+                raise SkipMe
         except (ContinuePropagation, StopPropagation):
             raise
         except BaseException as exc:
@@ -185,9 +198,9 @@ class BaseManager:
                     "Set the error handler to see more details"
                 )
             result = None
-
-        self._logger.debug(
-            f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms"
-        )
+        finally:
+            self._logger.debug(
+                f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms"
+            )
 
         return result

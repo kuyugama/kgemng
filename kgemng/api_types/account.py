@@ -18,7 +18,7 @@ class Account:
         raise NotImplementedError()
 
     @property
-    async def info(self) -> types.User:
+    def info(self) -> types.User:
         raise NotImplementedError()
 
     @property
