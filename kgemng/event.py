@@ -28,7 +28,7 @@ from .base import BaseManager, AddonNotSet, SkipMe
 class BeautyModel(BaseModel):
     def __str__(self):
         elements = {"_": self.__class__.__name__}
-        for field in self.fields:
+        for field in self.__fields__:
             value = getattr(self, field)
 
             if isinstance(value, types.Object):
@@ -54,6 +54,9 @@ class Event(BeautyModel):
 
     def skip(self):
         self.skipped = True
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class MessageReadEvent(Event):
