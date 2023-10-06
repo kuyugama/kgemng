@@ -183,7 +183,8 @@ class BaseManager:
                 except SkipMe:
                     pass
             else:
-                raise SkipMe
+                if self.parent is not None:
+                    raise SkipMe
         except (ContinuePropagation, StopPropagation):
             raise
         except BaseException as exc:
