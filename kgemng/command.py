@@ -239,15 +239,15 @@ class CommandManager(BaseManager):
                 break
 
     def add_call_of_command(self, command: Command):
+        if self.parent:
+            self.parent.add_call_of_command(command)
+
         for record in self.get_statistic():
             if record["command"] == command:
                 record["call_count"] += 1
                 return
 
         self._command_call_statistic.append({"command": command, "call_count": 1})
-
-        if self.parent:
-            self.parent.add_call_of_command(command)
 
     def get_statistic(self):
         return self._command_call_statistic
@@ -261,18 +261,19 @@ class CommandManager(BaseManager):
         if not command:
             raise SkipMe
 
+        owner_only_passed = command.owner_only and not (
+                message.from_user
+                and message.from_user.id == client.account.info.id
+        )
+
+        if (
+                self.check_execution(command, message.chat.id) and not owner_only_passed
+        ) or owner_only_passed:
+            return
+
         key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
 
         async with self._lock.lock(key):
-            owner_only_passed = command.owner_only and not (
-                message.from_user
-                and message.from_user.id == client.account.info.id
-            )
-
-            if (
-                self.check_execution(command, message.chat.id) and not owner_only_passed
-            ) or owner_only_passed:
-                return
 
             process = CommandExecutionProcess(chat_id=message.chat.id, command=command)
             self.add_execution(process)
