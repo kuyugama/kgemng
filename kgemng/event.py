@@ -11,14 +11,8 @@ from pyrogram import types, errors, StopPropagation
 from pyrogram.raw import types as raw_types
 from pyrogram.raw.base import Update
 from pyrogram.raw.types import (
-    UpdateReadChannelOutbox,
-    UpdateReadHistoryOutbox,
-    UpdateReadChannelDiscussionOutbox,
     PeerUser,
     PeerChat,
-    UpdateReadChannelInbox,
-    UpdateReadChannelDiscussionInbox,
-    UpdateReadHistoryInbox,
 )
 
 from .api_types import ExtendedClient, Account
@@ -333,35 +327,20 @@ class EventManager(BaseManager):
                 if not filter_.resolve(event):
                     continue
 
-                if isinstance(event, NewMessageEvent):
+                if isinstance(event, (NewMessageEvent, EditedMessageEvent)):
                     if (
                         event.message.from_user is not None
                         and event.message.from_user.id != client.account.info.id
                     ) and by_me:
                         continue
-
                 elif (
                     isinstance(
                         event,
                         (
-                            UpdateReadHistoryInbox,
-                            UpdateReadChannelInbox,
-                            UpdateReadChannelDiscussionInbox,
+                            MessageReadEvent,
                         ),
                     )
-                    and by_me
-                ):
-                    continue
-                elif (
-                    isinstance(
-                        event,
-                        (
-                            UpdateReadHistoryOutbox,
-                            UpdateReadChannelOutbox,
-                            UpdateReadChannelDiscussionOutbox,
-                        ),
-                    )
-                    and not by_me
+                    and (event.by_me and by_me)
                 ):
                     continue
 
