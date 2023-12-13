@@ -331,6 +331,7 @@ class EventManager(BaseManager):
                     if (
                         event.message.from_user is not None
                         and event.message.from_user.id != client.account.info.id
+                        or event.message.outgoing
                     ) and by_me:
                         continue
                 elif (

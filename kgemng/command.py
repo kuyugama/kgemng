@@ -261,14 +261,15 @@ class CommandManager(BaseManager):
         if not command:
             raise SkipMe
 
-        owner_only_passed = command.owner_only and not (
+        owner_only_fail = command.owner_only and (
                 message.from_user
-                and message.from_user.id == client.account.info.id
+                and message.from_user.id != client.account.info.id
+                or not message.outgoing
         )
 
         if (
-                self.check_execution(command, message.chat.id) and not owner_only_passed
-        ) or owner_only_passed:
+                self.check_execution(command, message.chat.id) and not owner_only_fail
+        ) or owner_only_fail:
             return
 
         key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"

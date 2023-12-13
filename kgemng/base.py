@@ -156,6 +156,21 @@ class BaseManager:
     ):
         self._error_handler = handler
 
+    async def execute_included(self, *args, **kwargs) -> any:
+        for manager in self.get_included_managers():
+            try:
+                result = await manager.execute(*args, **kwargs)
+                break
+            except SkipMe:
+                pass
+        else:
+            if self.parent is not None:
+                raise SkipMe
+            else:
+                raise ContinuePropagation
+
+        return result
+
     async def execute(self, *args, **kwargs):
         self._logger.debug(
             f"Executing manager with arguments > positional: {args} | keyword: {kwargs}"
@@ -172,6 +187,9 @@ class BaseManager:
             )
             return
 
+        skipped: bool = False
+        result = None
+
         start = timeit.default_timer()
 
         try:
@@ -181,17 +199,7 @@ class BaseManager:
                 self._logger.debug(f"Executable returned the coroutine. Waiting it...")
                 await result
         except SkipMe:
-            for manager in self.get_included_managers():
-                try:
-                    result = await manager.execute(*args, **kwargs)
-                    break
-                except SkipMe:
-                    pass
-            else:
-                if self.parent is not None:
-                    raise SkipMe
-                else:
-                    raise ContinuePropagation
+            skipped = True
         except (ContinuePropagation, StopPropagation):
             raise
         except BaseException as exc:
@@ -207,8 +215,12 @@ class BaseManager:
                 )
             result = None
         finally:
+            status = "executed" if not skipped else "skipped"
             self._logger.debug(
-                f"Manager executed. Took {(timeit.default_timer() - start) * 1000:2f}ms"
+                f"Manager {status}. Took {(timeit.default_timer() - start) * 1000:2f}ms"
             )
+
+        if skipped:
+            result = await self.execute_included(*args, **kwargs)
 
         return result
