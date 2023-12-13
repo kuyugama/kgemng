@@ -1,7 +1,6 @@
 import copy
 import logging
 import typing
-import uuid
 from dataclasses import dataclass
 from inspect import iscoroutinefunction
 
@@ -15,7 +14,7 @@ from .base import BaseManager, AddonNotSet, SkipMe
 
 @dataclass
 class Command:
-    body: str
+    body: tuple[str]
     prefixes: tuple[str]
 
     description: str | None
@@ -27,6 +26,12 @@ class Command:
 
     iscoro: bool = False
     enabled: bool = True
+
+
+@dataclass
+class MatchedCommand:
+    command: Command
+    arguments: list[list[str]]
 
 
 @dataclass
@@ -57,7 +62,7 @@ class CommandManager(BaseManager):
 
     def on_command(
         self,
-        body: str,
+        body: str | tuple[str],
         *filters,
         prefixes: str | tuple = ".",
         description: str = None,
@@ -85,7 +90,7 @@ class CommandManager(BaseManager):
     def register_command(
         self,
         callback,
-        body: str,
+        body: str | tuple[str],
         *filters,
         prefixes: str | tuple = ".",
         description: str = None,
@@ -98,7 +103,10 @@ class CommandManager(BaseManager):
                 "Cannot operate on {type} as prefixes".format(type=str(type(prefixes)))
             )
 
-        if not isinstance(body, str):
+        if isinstance(body, str):
+            body = (body,)
+
+        if not isinstance(body, (str, tuple)):
             raise ValueError(
                 "Cannot operate on {type} as command".format(type=str(type(body)))
             )
@@ -124,7 +132,7 @@ class CommandManager(BaseManager):
                 )
             )
 
-        body = body.lower()
+        body = tuple(map(str.lower, body))
 
         if not isinstance(prefixes, tuple):
             prefixes = tuple(prefixes)
@@ -210,19 +218,23 @@ class CommandManager(BaseManager):
         for command in self._registered_commands:
             if not command.enabled:
                 continue
-            for prefix in command.prefixes:
-                if not text.startswith(prefix):
+
+            for body in command.body:
+                if body not in text:
                     continue
+                for prefix in command.prefixes:
+                    if not text.startswith(prefix):
+                        continue
 
-                text_without_prefix = text[len(prefix):]
+                    text_without_prefix = text[len(prefix):]
 
-                if not text_without_prefix.startswith(command.body):
-                    continue
+                    if not text_without_prefix.startswith(body):
+                        continue
 
-                text_without_body = text_without_prefix[len(command.body):]
+                    text_without_body = text_without_prefix[len(body):]
 
-                if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
-                    return command
+                    if len(text_without_body) == 0 or text_without_body[0] in ("\n", " "):
+                        return command
 
     def check_execution(self, command: Command, chat_id: int):
         for executes in self._command_executes:
@@ -272,7 +284,7 @@ class CommandManager(BaseManager):
         ) or owner_only_fail:
             return
 
-        key = f"{message.chat.id}:C:{id(command) if command else uuid.uuid4()}"
+        key = f"{message.chat.id}:C:{id(command)}"
 
         async with self._lock.lock(key):
 
@@ -282,18 +294,20 @@ class CommandManager(BaseManager):
             for filter_ in command.filters:
                 if not await filter_(client, message):
                     self.execution_cleanup(process)
-                    message.continue_propagation()
+                    raise SkipMe
 
-            message.matched_command = command
-
-            message.command_manager = self
-
-            message.arguments = []
+            arguments = []
             if len(message.text.split()) > 1:
-                message.arguments = [
+                arguments = [
                     line.split()
                     for line in message.text.split(maxsplit=1)[1].splitlines()
                 ]
+
+            message.matched_command = MatchedCommand(command, arguments)
+
+            message.command_manager = self
+
+            message.arguments = arguments
 
             try:
                 if command.iscoro:
