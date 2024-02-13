@@ -97,7 +97,7 @@ class CommandManager(BaseManager):
         arguments: tuple = (),
         enabled: bool = True,
         owner_only: bool = True,
-    ) -> Command | None:
+    ) -> int | None:
         if not isinstance(prefixes, tuple) and not isinstance(prefixes, str):
             raise ValueError(
                 "Cannot operate on {type} as prefixes".format(type=str(type(prefixes)))
@@ -175,7 +175,7 @@ class CommandManager(BaseManager):
             command
         )
 
-        return copy.deepcopy(command)
+        return self._registered_commands.index(command)
 
     def describe_command(self, command: str, description: str, arguments: tuple):
         if not isinstance(command, str):
@@ -207,12 +207,12 @@ class CommandManager(BaseManager):
         else:
             raise ValueError("Command {body} not found".format(body=command))
 
-    def remove_command(self, command: Command):
-        if command not in self._registered_commands:
-            return
-
-        self._registered_commands.remove(command)
-        return True
+    def remove_command(self, index: int):
+        try:
+            del self._registered_commands[index]
+            return True
+        except KeyError:
+            return False
 
     def match_command(self, text: str) -> Command | None:
         for command in self._registered_commands:
@@ -238,7 +238,7 @@ class CommandManager(BaseManager):
 
     def check_execution(self, command: Command, chat_id: int):
         for executes in self._command_executes:
-            if chat_id == executes.chat_id and command == executes.command:
+            if chat_id == executes.chat_id and command is executes.command:
                 return True
 
     def add_execution(self, record):
@@ -246,7 +246,7 @@ class CommandManager(BaseManager):
 
     def execution_cleanup(self, remove_record):
         for record in self._command_executes.copy():
-            if remove_record == record:
+            if remove_record is record:
                 self._command_executes.remove(record)
                 break
 
@@ -282,7 +282,7 @@ class CommandManager(BaseManager):
         if (
                 self.check_execution(command, message.chat.id) and not owner_only_fail
         ) or owner_only_fail:
-            return
+            raise SkipMe
 
         key = f"{message.chat.id}:C:{id(command)}"
 

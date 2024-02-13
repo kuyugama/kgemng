@@ -65,7 +65,7 @@ class NewMessageEvent(Event):
 
 class DeletedMessagesEvent(Event):
     messages: typing.List[int]
-    chat: types.Chat
+    chat: types.Chat | None
 
 
 class EditedMessageEvent(Event):
@@ -74,11 +74,12 @@ class EditedMessageEvent(Event):
 
 class EventManager(BaseManager):
     _parent: type["EventManager"] | None = None
+
     def __init__(
-        self,
-        addon: Addon | None = AddonNotSet,
-        enabled: bool = False,
-        log_level: int = logging.WARNING,
+            self,
+            addon: Addon | None = AddonNotSet,
+            enabled: bool = False,
+            log_level: int = logging.WARNING,
     ):
         super().__init__(addon, enabled, log_level)
         self.executable = self.feed_event
@@ -95,7 +96,7 @@ class EventManager(BaseManager):
         return decorator
 
     def register_message_handler(
-        self, callback: typing.Callable, filter_: MagicFilter = F, by_me: bool = False
+            self, callback: typing.Callable, filter_: MagicFilter = F, by_me: bool = False
     ):
 
         self.register_event_handler(
@@ -103,7 +104,7 @@ class EventManager(BaseManager):
         )
 
     def on_messages_read(
-        self, chat_id: int = None, chat_type: str = None, by_me: bool = True
+            self, chat_id: int = None, chat_type: str = None, by_me: bool = True
     ):
         def decorator(callback: typing.Callable):
             self.register_messages_read_handler(
@@ -114,11 +115,11 @@ class EventManager(BaseManager):
         return decorator
 
     def register_messages_read_handler(
-        self,
-        callback: typing.Callable,
-        chat_id=None,
-        chat_type=None,
-        by_me: bool = True,
+            self,
+            callback: typing.Callable,
+            chat_id=None,
+            chat_type=None,
+            by_me: bool = True,
     ):
         filter_ = F.chat.id == chat_id & F.chat.type == chat_type
 
@@ -134,7 +135,7 @@ class EventManager(BaseManager):
         )
 
     def on_event(
-        self, event: type[Event], filter_: MagicFilter = F, by_me: bool = True
+            self, event: type[Event], filter_: MagicFilter = F, by_me: bool = True
     ):
         def decorator(callback):
             self.register_event_handler(
@@ -145,11 +146,11 @@ class EventManager(BaseManager):
         return decorator
 
     def register_event_handler(
-        self,
-        event: type[Event],
-        callback: typing.Callable,
-        filter_: MagicFilter = F,
-        by_me: bool = True,
+            self,
+            event: type[Event],
+            callback: typing.Callable,
+            filter_: MagicFilter = F,
+            by_me: bool = True,
     ):
         if not iscoroutinefunction(callback):
             raise ValueError(
@@ -168,10 +169,10 @@ class EventManager(BaseManager):
     # noinspection PyProtectedMember
     @staticmethod
     async def resolve_event(
-        client: ExtendedClient,
-        raw_event: Update,
-        users: dict[int, types.User],
-        chats: dict[int, types.Chat],
+            client: ExtendedClient,
+            raw_event: Update,
+            users: dict[int, types.User],
+            chats: dict[int, types.Chat],
     ):
 
         if isinstance(raw_event, Event):
@@ -180,47 +181,47 @@ class EventManager(BaseManager):
         account = client.account
 
         if isinstance(
-            raw_event,
-            (
-                raw_types.UpdateReadChannelOutbox,
-                raw_types.UpdateReadHistoryOutbox,
-                raw_types.UpdateReadChannelDiscussionOutbox,
-                raw_types.UpdateReadChannelInbox,
-                raw_types.UpdateReadChannelDiscussionInbox,
-                raw_types.UpdateReadHistoryInbox,
-            ),
+                raw_event,
+                (
+                        raw_types.UpdateReadChannelOutbox,
+                        raw_types.UpdateReadHistoryOutbox,
+                        raw_types.UpdateReadChannelDiscussionOutbox,
+                        raw_types.UpdateReadChannelInbox,
+                        raw_types.UpdateReadChannelDiscussionInbox,
+                        raw_types.UpdateReadHistoryInbox,
+                ),
         ):
             by_me = False
             if isinstance(
-                raw_event,
-                (
-                    raw_types.UpdateReadHistoryInbox,
-                    raw_types.UpdateReadChannelInbox,
-                    raw_types.UpdateReadChannelDiscussionInbox,
-                    raw_types.UpdateReadChannelDiscussionOutbox,
-                ),
+                    raw_event,
+                    (
+                            raw_types.UpdateReadHistoryInbox,
+                            raw_types.UpdateReadChannelInbox,
+                            raw_types.UpdateReadChannelDiscussionInbox,
+                            raw_types.UpdateReadChannelDiscussionOutbox,
+                    ),
             ):
                 by_me = True
 
             chat = None
             if isinstance(
-                raw_event,
-                (
-                    raw_types.UpdateReadChannelOutbox,
-                    raw_types.UpdateReadChannelInbox,
-                    raw_types.UpdateReadChannelDiscussionInbox,
-                    raw_types.UpdateReadChannelDiscussionOutbox,
-                ),
+                    raw_event,
+                    (
+                            raw_types.UpdateReadChannelOutbox,
+                            raw_types.UpdateReadChannelInbox,
+                            raw_types.UpdateReadChannelDiscussionInbox,
+                            raw_types.UpdateReadChannelDiscussionOutbox,
+                    ),
             ):
                 peer_id = raw_event.channel_id
                 peer = users.get(peer_id) or chats.get(peer_id)
 
                 if isinstance(
-                    raw_event,
-                    (
-                        raw_types.UpdateReadChannelDiscussionInbox,
-                        raw_types.UpdateReadChannelDiscussionOutbox,
-                    ),
+                        raw_event,
+                        (
+                                raw_types.UpdateReadChannelDiscussionInbox,
+                                raw_types.UpdateReadChannelDiscussionOutbox,
+                        ),
                 ):
                     try:
                         chat = (
@@ -269,7 +270,7 @@ class EventManager(BaseManager):
             )
 
         elif isinstance(
-            raw_event, (raw_types.UpdateNewMessage, raw_types.UpdateNewChannelMessage)
+                raw_event, (raw_types.UpdateNewMessage, raw_types.UpdateNewChannelMessage)
         ):
             message: types.Message = await types.Message._parse(
                 client, raw_event.message, users, chats
@@ -278,8 +279,8 @@ class EventManager(BaseManager):
             return NewMessageEvent(account=account, message=message)
 
         elif isinstance(
-            raw_event,
-            (raw_types.UpdateDeleteChannelMessages, raw_types.UpdateDeleteMessages),
+                raw_event,
+                (raw_types.UpdateDeleteChannelMessages, raw_types.UpdateDeleteMessages),
         ):
 
             chat = None
@@ -295,7 +296,7 @@ class EventManager(BaseManager):
             )
 
         elif isinstance(
-            raw_event, (raw_types.UpdateEditMessage, raw_types.UpdateEditChannelMessage)
+                raw_event, (raw_types.UpdateEditMessage, raw_types.UpdateEditChannelMessage)
         ):
             message: types.Message = await types.Message._parse(
                 client, raw_event.message, users, chats
@@ -304,11 +305,11 @@ class EventManager(BaseManager):
             return EditedMessageEvent(account=account, message=message)
 
     async def feed_event(
-        self,
-        client: ExtendedClient,
-        raw_event: Update,
-        users: dict[int, types.User],
-        chats: dict[int, types.Chat],
+            self,
+            client: ExtendedClient,
+            raw_event: Update,
+            users: dict[int, types.User],
+            chats: dict[int, types.Chat],
     ):
         async with self._lock.lock(client):
             event = await self.resolve_event(
@@ -329,19 +330,19 @@ class EventManager(BaseManager):
 
                 if isinstance(event, (NewMessageEvent, EditedMessageEvent)):
                     if (
-                        event.message.from_user is not None
-                        and event.message.from_user.id != client.account.info.id
-                        or event.message.outgoing
+                            event.message.from_user is not None
+                            and event.message.from_user.id != client.account.info.id
+                            or event.message.outgoing
                     ) and by_me:
                         continue
                 elif (
-                    isinstance(
-                        event,
-                        (
-                            MessageReadEvent,
-                        ),
-                    )
-                    and (event.by_me and by_me)
+                        isinstance(
+                            event,
+                            (
+                                    MessageReadEvent,
+                            ),
+                        )
+                        and (event.by_me and by_me)
                 ):
                     continue
 
